@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,11 +7,176 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Cornerstore { // negocios de barrio?? 
-  id        Int      @id @default(autoincrement())
-  email     String   @unique @db.VarChar(100)
-  createAt  DateTime @default(now())
-  updated   DateTime @updatedAt
-  password  String
-  avatarImg String?
+// Enum para los tipos de pago
+enum PaymentType {
+  DEBITO
+  CREDITO
+  EFECTIVO
+}
+
+model Contact {
+  id             Int    @id @default(autoincrement())
+  alias          String
+  email          String
+  address        String
+  phone          String
+  emergencyPhone String
+
+  cornerStore CornerStore?
+}
+
+// Modelo para el negocio (cornerStore)
+model CornerStore {
+  id        Int    @id @default(autoincrement())
+  owner     String
+  name      String
+  contactId Int    @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  admins   Admin[]   @relation("StoreAdmins") // Relación con administradores
+  cashiers Cashier[] @relation("StoreCashiers") // Relación con cajeros
+  sales    Sale[] // Relación con ventas
+  User     User[]
+  products Product[] // Una tienda tiene muchos productos
+}
+
+// Modelo para el catálogo general de productos
+model ProductCatalog {
+  id    Int      @id @default(autoincrement())
+  name  String
+  image String[]
+
+  referencePrices ReferencePriceProduct[] // Precios de referencia
+  products        Product[] // Relación con productos general
+}
+
+// Modelo para los precios de referencia de los productos
+model ReferencePriceProduct {
+  id               Int            @id @default(autoincrement())
+  price            Float // Precio de referencia
+  productCatalog   ProductCatalog @relation(fields: [productCatalogId], references: [id], onDelete: Cascade)
+  productCatalogId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id       Int               @id @default(autoincrement())
+  name     String
+  products ProductCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductCategory {
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  Int
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId Int
+
+  assignedAt DateTime @default(now())
+  assignedBy String
+
+  @@id([productId, categoryId])
+}
+
+// Modelo de productos específicos en CornerStore
+model Product {
+  id       Int               @id @default(autoincrement())
+  price    Float // Precio específico del CornerStore
+  category ProductCategory[] // Categoría del producto
+  stock    Int
+
+  addedBy String // Usuario que agregó el producto
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cornerStoreId Int
+  cornerStore   CornerStore @relation(fields: [cornerStoreId], references: [id])
+
+  catalogId Int
+  catalog   ProductCatalog @relation(fields: [catalogId], references: [id])
+}
+
+// Modelo para los usuarios (base de usuarios)
+model User {
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
+  password String
+
+  role UserRole // Rol del usuario (admin, cajero, etc.)
+
+  cornerStore   CornerStore? @relation(fields: [cornerStoreId], references: [id])
+  cornerStoreId Int?
+
+  createdAt DateTime @default(now()) 
+  updatedAt DateTime @updatedAt 
+
+  Admin   Admin[]
+  Cashier Cashier[]
+}
+
+// Enum para los roles de usuario
+enum UserRole {
+  ADMIN
+  CASHIER
+}
+
+// Modelo para los administradores (especialización de usuario)
+model Admin {
+  id Int @id @default(autoincrement())
+
+  department String
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  cornerStore   CornerStore @relation("StoreAdmins", fields: [cornerStoreId], references: [id])
+  cornerStoreId Int
+
+  assignedAt DateTime @default(now())
+  assignedBy String
+}
+
+// Modelo para los cajeros (especialización de usuario)
+model Cashier {
+  id Int @id @default(autoincrement())
+
+  initialCashAmount String
+
+  userId Int // ID del usuario (relación uno a uno)
+  user   User @relation(fields: [userId], references: [id])
+
+  cornerStore   CornerStore @relation("StoreCashiers", fields: [cornerStoreId], references: [id])
+  cornerStoreId Int // ID del negocio al que pertenece el cajero
+
+  Sale Sale[]
+
+  assignedAt DateTime @default(now())
+  assignedBy String
+}
+
+// Modelo para las ventas
+model Sale {
+  id            Int         @id @default(autoincrement())
+  totalAmount   Float // Monto total de la venta
+  paymentType   PaymentType // Tipo de pago (débito, crédito, efectivo)
+  saleDate      DateTime    @default(now()) // Fecha de la venta
+  
+  cornerStoreId Int // ID del negocio donde se realizó la venta
+  cornerStore   CornerStore @relation(fields: [cornerStoreId], references: [id])
+
+  cashierId Int // ID del cajero que realizó la venta
+  cashier   Cashier @relation(fields: [cashierId], references: [id])
+
+  createdAt DateTime @default(now()) // Fecha de creación
+  updatedAt DateTime @updatedAt // Fecha de la última actualización
 }
